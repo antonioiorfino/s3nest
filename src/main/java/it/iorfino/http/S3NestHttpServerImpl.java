@@ -59,6 +59,7 @@ public final class S3NestHttpServerImpl implements S3NestHttpServer {
                 S3NestHttpRequest request = new S3NestHttpRequest(
                         exchange.getRequestMethod(),
                         exchange.getRequestURI().getPath(),
+                        exchange.getRequestURI().getQuery(),
                         exchange.getRequestHeaders(),
                         exchange.getRequestBody()
                 );
