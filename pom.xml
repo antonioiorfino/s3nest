@@ -15,7 +15,7 @@
         A lightweight, embedded, thread-safe S3 mock server for Java tests.
     </description>
 
-    <url>https://github.com/iorfino/s3nest</url>
+    <url>https://github.com/antonioiorfino/s3nest</url>
 
     <licenses>
         <license>
@@ -39,9 +39,9 @@
     </developers>
 
     <scm>
-        <connection>scm:git:git://github.com/iorfino/s3nest.git</connection>
-        <developerConnection>scm:git:ssh://github.com/iorfino/s3nest.git</developerConnection>
-        <url>https://github.com/iorfino/s3nest</url>
+        <connection>scm:git:git://github.com/antonioiorfino/s3nest.git</connection>
+        <developerConnection>scm:git:ssh://github.com/antonioiorfino/s3nest.git</developerConnection>
+        <url>https://github.com/antonioiorfino/s3nest</url>
     </scm>
 
     <properties>
@@ -83,6 +83,28 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.plugin.version}</version>
+            </plugin>
+
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.14</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
 
         </plugins>
