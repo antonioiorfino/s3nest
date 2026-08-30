@@ -55,17 +55,22 @@ public final class S3NestS3ResponseMapper {
       return mapEmptyResult(emptyResult);
     }
 
-    if (result instanceof S3NestS3ObjectResult objectResult) {
-      Map<String, List<String>> headers = new HashMap<>(objectResult.metadata());
-      headers.put("Content-Length", List.of(Long.toString(objectResult.contentLength())));
-      return new S3NestHttpResponse(200, headers, output -> objectResult.body().transferTo(output));
+    if (result
+        instanceof
+        S3NestS3ObjectResult(
+            java.io.InputStream body1,
+            long contentLength,
+            Map<String, List<String>> metadata)) {
+      Map<String, List<String>> headers = new HashMap<>(metadata);
+      headers.put("Content-Length", List.of(Long.toString(contentLength)));
+      return new S3NestHttpResponse(200, headers, output -> body1.transferTo(output));
     }
 
     if (result instanceof S3NestS3XmlResult(S3Operation operation, String body)) {
       return new S3NestHttpResponse(
-          200,
+          statusCodeForSuccess(operation),
           Map.of("Content-Type", List.of("application/xml")),
-          output -> output.write(body.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+          output -> output.write(body.getBytes(StandardCharsets.UTF_8)));
     }
 
     if (result
@@ -123,6 +128,14 @@ public final class S3NestS3ResponseMapper {
       case "InvalidAccessKeyId", "SignatureDoesNotMatch" -> 403;
       case "InvalidRequest", "InvalidArgument" -> 400;
       default -> 500;
+    };
+  }
+
+  private int statusCodeForSuccess(S3Operation operation) {
+    return switch (operation) {
+      case LIST_BUCKETS, LIST_OBJECTS, LIST_OBJECTS_V2 -> 200;
+      default ->
+          throw new IllegalArgumentException("Unsupported XML response operation: " + operation);
     };
   }
 }

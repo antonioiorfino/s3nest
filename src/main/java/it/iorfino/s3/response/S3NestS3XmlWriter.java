@@ -25,17 +25,15 @@ public final class S3NestS3XmlWriter {
    *   <Message>...</Message>
    *   <BucketName>...</BucketName>
    *   <Key>...</Key>
+   *   <RequestId>...</RequestId>
    * </Error>
    * }</pre>
    *
    * <p>{@code BucketName} is included only when the error contains a bucket name. {@code Key} is
-   * included only when the error contains an object key.
+   * included only when the error contains an object key. {@code RequestId} is included only when
+   * the error contains a request identifier.
    *
    * <p>XML special characters in error values are escaped before being written to the response.
-   *
-   * @param error the S3 error to serialize; must not be {@code null}
-   * @return the UTF-8 XML representation of the S3 error
-   * @throws NullPointerException if {@code error} is {@code null}
    */
   public String writeError(S3NestS3ErrorResult error) {
     if (error == null) {
@@ -55,6 +53,10 @@ public final class S3NestS3XmlWriter {
 
     if (error.objectKey() != null) {
       xml.append("  <Key>").append(escapeXml(error.objectKey())).append("</Key>\n");
+    }
+
+    if (error.requestId() != null) {
+      xml.append("  <RequestId>").append(escapeXml(error.requestId())).append("</RequestId>\n");
     }
 
     xml.append("</Error>\n");

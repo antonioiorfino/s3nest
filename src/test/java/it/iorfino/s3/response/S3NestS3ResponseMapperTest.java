@@ -53,6 +53,7 @@ class S3NestS3ResponseMapperTest {
 
     S3NestHttpResponse response = mapper.map(result);
 
+    assertEquals(200, response.statusCode());
     assertEquals("hello S3", responseBody(response));
     assertEquals(
         List.of(String.valueOf(bodyMessage.length())), response.headers().get("Content-Length"));
@@ -97,10 +98,6 @@ class S3NestS3ResponseMapperTest {
     assertEquals(List.of("8"), response.headers().get("Content-Length"));
   }
 
-  /**
-   * Verifies that empty S3 operation results are mapped to the HTTP status code defined by the
-   * corresponding S3 operation semantics.
-   */
   @ParameterizedTest
   @CsvSource({
     "CREATE_BUCKET, 200",
@@ -113,25 +110,23 @@ class S3NestS3ResponseMapperTest {
     "COPY_OBJECT, 200"
   })
   void shouldMapEmptyResultToOperationSpecificStatusCode(
-      S3Operation operation, int expectedStatusCode) {
+      S3Operation operation, int expectedStatusCode) throws IOException {
 
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
 
     S3NestHttpResponse response = mapper.map(new S3NestS3EmptyResult(operation));
 
     assertEquals(expectedStatusCode, response.statusCode());
+    assertEquals("", responseBody(response));
   }
 
-  /**
-   * Verifies that an XML operation result is mapped to a successful HTTP response with the XML
-   * payload preserved in the response body and the appropriate content type.
-   */
-  @Test
-  void shouldMapXmlResultToResponseBody() throws IOException {
+  @ParameterizedTest
+  @CsvSource({"LIST_BUCKETS", "LIST_OBJECTS", "LIST_OBJECTS_V2"})
+  void shouldMapXmlResultToSuccessfulResponse(S3Operation operation) throws IOException {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
 
     String xml = "<ListBucketResult><Name>test-bucket</Name></ListBucketResult>";
-    S3NestS3XmlResult result = new S3NestS3XmlResult(S3Operation.LIST_OBJECTS, xml);
+    S3NestS3XmlResult result = new S3NestS3XmlResult(operation, xml);
 
     S3NestHttpResponse response = mapper.map(result);
 
@@ -256,6 +251,185 @@ class S3NestS3ResponseMapperTest {
     assertNull(result.objectKey());
   }
 
+  @Test
+  void shouldMapEmptyObjectWithZeroContentLength() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    S3NestS3ObjectResult result =
+        new S3NestS3ObjectResult(new ByteArrayInputStream(new byte[0]), 0, Map.of());
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(200, response.statusCode());
+    assertEquals(List.of("0"), response.headers().get("Content-Length"));
+    assertEquals("", responseBody(response));
+  }
+
+  @Test
+  void shouldNotReadObjectBodyDuringMapping() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    TrackingInputStream body = new TrackingInputStream();
+
+    S3NestS3ObjectResult result = new S3NestS3ObjectResult(body, 0, Map.of());
+
+    mapper.map(result);
+
+    assertEquals(0, body.readCount());
+  }
+
+  @Test
+  void shouldReadObjectBodyWhenWritingResponse() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    TrackingInputStream body = new TrackingInputStream();
+
+    S3NestS3ObjectResult result = new S3NestS3ObjectResult(body, 0, Map.of());
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(0, body.readCount());
+
+    response.writeBody(new ByteArrayOutputStream());
+
+    assertEquals(1, body.readCount());
+  }
+
+  @Test
+  void shouldIncludeErrorContextInS3ErrorResponse() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    S3NestS3ErrorResult result =
+        new S3NestS3ErrorResult(
+            "NoSuchKey",
+            "The specified key does not exist.",
+            "my-bucket",
+            "folder/file.txt",
+            "request-123");
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(404, response.statusCode());
+    assertEquals(List.of("application/xml"), response.headers().get("Content-Type"));
+
+    assertEquals(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<Error>\n"
+            + "  <Code>NoSuchKey</Code>\n"
+            + "  <Message>The specified key does not exist.</Message>\n"
+            + "  <BucketName>my-bucket</BucketName>\n"
+            + "  <Key>folder/file.txt</Key>\n"
+            + "  <RequestId>request-123</RequestId>\n"
+            + "</Error>\n",
+        responseBody(response));
+  }
+
+  @Test
+  void shouldEscapeXmlCharactersInErrorContext() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    S3NestS3ErrorResult result =
+        new S3NestS3ErrorResult(
+            "InvalidRequest", "Invalid request", "bucket<&>", "folder/<file>&.txt", "request<&>");
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<Error>\n"
+            + "  <Code>InvalidRequest</Code>\n"
+            + "  <Message>Invalid request</Message>\n"
+            + "  <BucketName>bucket&lt;&amp;&gt;</BucketName>\n"
+            + "  <Key>folder/&lt;file&gt;&amp;.txt</Key>\n"
+            + "  <RequestId>request&lt;&amp;&gt;</RequestId>\n"
+            + "</Error>\n",
+        responseBody(response));
+  }
+
+  @Test
+  void shouldTranslateInternalErrorWithoutExposingExceptionDetails() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    S3NestS3ErrorResult result =
+        new S3NestS3ErrorResult(
+            "InternalError",
+            "We encountered an internal error. Please try again.",
+            null,
+            null,
+            "request-123");
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(500, response.statusCode());
+
+    String body = responseBody(response);
+
+    assertEquals(true, body.contains("<Code>InternalError</Code>"));
+    assertEquals(
+        true,
+        body.contains("<Message>We encountered an internal error. Please try again.</Message>"));
+    assertEquals(true, body.contains("<RequestId>request-123</RequestId>"));
+
+    assertEquals(false, body.contains("RuntimeException"));
+    assertEquals(false, body.contains("password"));
+  }
+
+  @Test
+  void shouldOverrideMetadataContentLengthWithActualObjectContentLength() {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    Map<String, List<String>> metadata =
+        Map.of(
+            "Content-Length", List.of("999"),
+            "Content-Type", List.of("text/plain"));
+
+    S3NestS3ObjectResult result =
+        new S3NestS3ObjectResult(
+            new ByteArrayInputStream("hello S3".getBytes(StandardCharsets.UTF_8)), 8, metadata);
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(List.of("8"), response.headers().get("Content-Length"));
+    assertEquals(List.of("text/plain"), response.headers().get("Content-Type"));
+  }
+
+  @Test
+  void shouldPreserveXmlWithEmptyCollection() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    String xml =
+        "<ListBucketResult>" + "<Name>empty-bucket</Name>" + "<Contents/>" + "</ListBucketResult>";
+
+    S3NestS3XmlResult result = new S3NestS3XmlResult(S3Operation.LIST_OBJECTS, xml);
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(200, response.statusCode());
+    assertEquals(List.of("application/xml"), response.headers().get("Content-Type"));
+    assertEquals(xml, responseBody(response));
+  }
+
+  @Test
+  void shouldMapAccessDeniedErrorWithoutContext() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    S3NestS3ErrorResult result =
+        new S3NestS3ErrorResult("AccessDenied", "Access Denied", null, null, null);
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(403, response.statusCode());
+    assertEquals(List.of("application/xml"), response.headers().get("Content-Type"));
+
+    assertEquals(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<Error>\n"
+            + "  <Code>AccessDenied</Code>\n"
+            + "  <Message>Access Denied</Message>\n"
+            + "</Error>\n",
+        responseBody(response));
+  }
+
   /**
    * Writes the response body to an in-memory output stream and returns it as a UTF-8 string.
    *
@@ -269,5 +443,20 @@ class S3NestS3ResponseMapperTest {
     response.writeBody(output);
 
     return output.toString(StandardCharsets.UTF_8);
+  }
+
+  private static final class TrackingInputStream extends InputStream {
+
+    private int readCount;
+
+    @Override
+    public int read() {
+      readCount++;
+      return -1;
+    }
+
+    int readCount() {
+      return readCount;
+    }
   }
 }
