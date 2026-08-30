@@ -3,9 +3,12 @@ package it.iorfino.s3.response;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import it.iorfino.http.S3NestHttpResponse;
+import it.iorfino.s3.handler.S3NestS3BucketNotFoundException;
 import it.iorfino.s3.model.S3Operation;
 import it.iorfino.s3.result.S3NestS3EmptyResult;
+import it.iorfino.s3.result.S3NestS3ErrorResult;
 import it.iorfino.s3.result.S3NestS3ObjectResult;
+import it.iorfino.s3.result.S3NestS3XmlResult;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -14,6 +17,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 /**
  * Tests the mapping of S3 operation results to HTTP responses.
@@ -72,20 +77,174 @@ class S3NestS3ResponseMapperTest {
     assertEquals(List.of("\"abc123\""), response.headers().get("ETag"));
   }
 
-    @Test
-    void shouldMapObjectContentLengthToResponseHeader() {
-        S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+  /**
+   * Verifies that the content length of an object result is propagated to the HTTP response as the
+   * {@code Content-Length} header.
+   */
+  @Test
+  void shouldMapObjectContentLengthToResponseHeader() {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
 
-        S3NestS3ObjectResult result =
-            new S3NestS3ObjectResult(
-                new ByteArrayInputStream("hello S3".getBytes(StandardCharsets.UTF_8)),
-                8,
-                Map.of());
+    S3NestS3ObjectResult result =
+        new S3NestS3ObjectResult(
+            new ByteArrayInputStream("hello S3".getBytes(StandardCharsets.UTF_8)), 8, Map.of());
 
-        S3NestHttpResponse response = mapper.map(result);
+    S3NestHttpResponse response = mapper.map(result);
 
-        assertEquals(List.of("8"), response.headers().get("Content-Length"));
-    }
+    assertEquals(List.of("8"), response.headers().get("Content-Length"));
+  }
+
+  /**
+   * Verifies that empty S3 operation results are mapped to the HTTP status code defined by the
+   * corresponding S3 operation semantics.
+   */
+  @ParameterizedTest
+  @CsvSource({
+    "CREATE_BUCKET, 200",
+    "DELETE_BUCKET, 204",
+    "DELETE_OBJECT, 204",
+    "ABORT_MULTIPART_UPLOAD, 204",
+    "HEAD_BUCKET, 200",
+    "HEAD_OBJECT, 200",
+    "PUT_OBJECT, 200",
+    "COPY_OBJECT, 200"
+  })
+  void shouldMapEmptyResultToOperationSpecificStatusCode(
+      S3Operation operation, int expectedStatusCode) {
+
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    S3NestHttpResponse response = mapper.map(new S3NestS3EmptyResult(operation));
+
+    assertEquals(expectedStatusCode, response.statusCode());
+  }
+
+  /**
+   * Verifies that an XML operation result is mapped to a successful HTTP response with the XML
+   * payload preserved in the response body and the appropriate content type.
+   */
+  @Test
+  void shouldMapXmlResultToResponseBody() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    String xml = "<ListBucketResult><Name>test-bucket</Name></ListBucketResult>";
+    S3NestS3XmlResult result = new S3NestS3XmlResult(xml);
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(200, response.statusCode());
+    assertEquals(List.of("application/xml"), response.headers().get("Content-Type"));
+    assertEquals(xml, responseBody(response));
+  }
+
+  /**
+   * Verifies that an S3 error result is mapped to a {@code 404 Not Found} response containing the
+   * corresponding S3 error code and message in the XML response body.
+   */
+  @Test
+  void shouldMapNoSuchBucketErrorToNotFoundResponse() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    S3NestS3ErrorResult result =
+        new S3NestS3ErrorResult("NoSuchBucket", "The specified bucket does not exist.");
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(404, response.statusCode());
+    assertEquals(List.of("application/xml"), response.headers().get("Content-Type"));
+
+    String body = responseBody(response);
+
+    assertEquals(
+        "<Error>"
+            + "<Code>NoSuchBucket</Code>"
+            + "<Message>The specified bucket does not exist.</Message>"
+            + "</Error>",
+        body);
+  }
+
+  /** Verifies that S3 error codes are mapped to their corresponding HTTP status codes. */
+  @ParameterizedTest
+  @CsvSource({
+    "NoSuchBucket, 404",
+    "NoSuchKey, 404",
+    "NoSuchUpload, 404",
+    "AccessDenied, 403",
+    "InvalidAccessKeyId, 403",
+    "SignatureDoesNotMatch, 403",
+    "InvalidRequest, 400",
+    "InvalidArgument, 400"
+  })
+  void shouldMapS3ErrorCodeToHttpStatusCode(String errorCode, int expectedStatusCode)
+      throws IOException {
+
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    S3NestS3ErrorResult result = new S3NestS3ErrorResult(errorCode, "Test error");
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(expectedStatusCode, response.statusCode());
+  }
+
+  /**
+   * Verifies that XML-sensitive characters in an S3 error message are escaped so that the generated
+   * response remains a well-formed XML document.
+   */
+  @Test
+  void shouldEscapeXmlCharactersInErrorMessage() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    S3NestS3ErrorResult result =
+        new S3NestS3ErrorResult("InvalidRequest", "Invalid value: <test> & \"example\"");
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(
+        "<Error>"
+            + "<Code>InvalidRequest</Code>"
+            + "<Message>Invalid value: &lt;test&gt; &amp; \"example\"</Message>"
+            + "</Error>",
+        responseBody(response));
+  }
+
+  /**
+   * Verifies that an unrecognized S3 error code is translated into an internal server error without
+   * exposing implementation details through the HTTP response.
+   */
+  @Test
+  void shouldMapUnknownErrorCodeToInternalServerError() throws IOException {
+    S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+    S3NestS3ErrorResult result =
+        new S3NestS3ErrorResult("UnknownError", "An unexpected error occurred.");
+
+    S3NestHttpResponse response = mapper.map(result);
+
+    assertEquals(500, response.statusCode());
+    assertEquals(List.of("application/xml"), response.headers().get("Content-Type"));
+    assertEquals(
+        "<Error>"
+            + "<Code>UnknownError</Code>"
+            + "<Message>An unexpected error occurred.</Message>"
+            + "</Error>",
+        responseBody(response));
+  }
+
+  /**
+   * Verifies that a missing bucket exception is translated into the corresponding S3 error result.
+   */
+  @Test
+  void shouldMapBucketNotFoundExceptionToNoSuchBucketError() {
+    S3NestS3ErrorMapper mapper = new S3NestS3ErrorMapper();
+
+    S3NestS3BucketNotFoundException exception = new S3NestS3BucketNotFoundException("test-bucket");
+
+    S3NestS3ErrorResult result = mapper.map(exception);
+
+    assertEquals("NoSuchBucket", result.code());
+    assertEquals("The specified bucket does not exist.", result.message());
+  }
 
   /**
    * Writes the response body to an in-memory output stream and returns it as a UTF-8 string.

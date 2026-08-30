@@ -3,11 +3,16 @@ package it.iorfino.s3.response;
 import it.iorfino.http.S3NestHttpResponse;
 import it.iorfino.s3.model.S3NestS3OperationResult;
 import it.iorfino.s3.result.S3NestS3EmptyResult;
+import it.iorfino.s3.result.S3NestS3ErrorResult;
 import it.iorfino.s3.result.S3NestS3ObjectResult;
-
+import it.iorfino.s3.result.S3NestS3XmlResult;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamException;
 
 /**
  * Maps S3 operation results to transport-independent HTTP responses.
@@ -21,20 +26,21 @@ import java.util.Map;
  */
 public final class S3NestS3ResponseMapper {
 
-    /**
-     * Maps an S3 operation result to an HTTP response.
-     *
-     * <p>Empty results are mapped according to the S3 operation that produced them. Object results are
-     * returned with a successful {@code 200 OK} status, their metadata is propagated as HTTP response
-     * headers, and their content length is exposed through the {@code Content-Length} header.
-     *
-     * <p>Object content is streamed directly from the result's input stream to the response output
-     * stream without loading the entire object into memory.
-     *
-     * @param result the result produced by an S3 operation handler
-     * @return the HTTP response corresponding to the operation result
-     * @throws IllegalArgumentException if the result type is not supported
-     */
+  /**
+   * Maps an S3 operation result to an HTTP response.
+   *
+   * <p>Empty results are mapped according to the S3 operation that produced them. Object results
+   * are returned with a successful {@code 200 OK} status, their metadata is propagated as HTTP
+   * response headers, and their content length is exposed through the {@code Content-Length}
+   * header.
+   *
+   * <p>Object content is streamed directly from the result's input stream to the response output
+   * stream without loading the entire object into memory.
+   *
+   * @param result the result produced by an S3 operation handler
+   * @return the HTTP response corresponding to the operation result
+   * @throws IllegalArgumentException if the result type is not supported
+   */
   public S3NestHttpResponse map(S3NestS3OperationResult result) {
 
     if (result instanceof S3NestS3EmptyResult emptyResult) {
@@ -42,10 +48,25 @@ public final class S3NestS3ResponseMapper {
     }
 
     if (result instanceof S3NestS3ObjectResult objectResult) {
-        Map<String, List<String>> headers = new HashMap<>(objectResult.metadata());
-        headers.put("Content-Length", List.of(Long.toString(objectResult.contentLength())));
+      Map<String, List<String>> headers = new HashMap<>(objectResult.metadata());
+      headers.put("Content-Length", List.of(Long.toString(objectResult.contentLength())));
+      return new S3NestHttpResponse(200, headers, output -> objectResult.body().transferTo(output));
+    }
+
+    if (result instanceof S3NestS3XmlResult(String body)) {
       return new S3NestHttpResponse(
-          200, objectResult.metadata(), output -> objectResult.body().transferTo(output));
+          200,
+          Map.of("Content-Type", List.of("application/xml")),
+          output -> output.write(body.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+
+    if (result instanceof S3NestS3ErrorResult(String code, String message)) {
+      String body = buildErrorXml(code, message);
+
+      return new S3NestHttpResponse(
+          statusCodeFor(code),
+          Map.of("Content-Type", List.of("application/xml")),
+          output -> output.write(body.getBytes(StandardCharsets.UTF_8)));
     }
 
     throw new IllegalArgumentException(
@@ -76,5 +97,40 @@ public final class S3NestS3ResponseMapper {
         };
 
     return new S3NestHttpResponse(statusCode, Map.of(), output -> {});
+  }
+
+  private int statusCodeFor(String errorCode) {
+    return switch (errorCode) {
+      case "NoSuchBucket", "NoSuchKey", "NoSuchUpload" -> 404;
+      case "AccessDenied" -> 403;
+      case "InvalidAccessKeyId", "SignatureDoesNotMatch" -> 403;
+      case "InvalidRequest", "InvalidArgument" -> 400;
+      default -> 500;
+    };
+  }
+
+  private String buildErrorXml(String code, String message) {
+    StringWriter writer = new StringWriter();
+
+    try {
+      var xmlWriter = XMLOutputFactory.newFactory().createXMLStreamWriter(writer);
+
+      xmlWriter.writeStartElement("Error");
+
+      xmlWriter.writeStartElement("Code");
+      xmlWriter.writeCharacters(code);
+      xmlWriter.writeEndElement();
+
+      xmlWriter.writeStartElement("Message");
+      xmlWriter.writeCharacters(message);
+      xmlWriter.writeEndElement();
+
+      xmlWriter.writeEndElement();
+      xmlWriter.close();
+
+      return writer.toString();
+    } catch (XMLStreamException e) {
+      throw new IllegalStateException("Unable to generate S3 error XML", e);
+    }
   }
 }
