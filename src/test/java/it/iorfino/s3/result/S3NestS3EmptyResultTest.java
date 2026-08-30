@@ -3,6 +3,7 @@ package it.iorfino.s3.result;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import it.iorfino.s3.model.S3NestS3OperationResult;
+import it.iorfino.s3.model.S3Operation;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -20,7 +21,7 @@ class S3NestS3EmptyResultTest {
    */
   @Test
   void shouldBeAnS3OperationResult() {
-    S3NestS3EmptyResult result = new S3NestS3EmptyResult();
+    S3NestS3EmptyResult result = new S3NestS3EmptyResult(S3Operation.GET_OBJECT);
 
     assertInstanceOf(S3NestS3OperationResult.class, result);
   }

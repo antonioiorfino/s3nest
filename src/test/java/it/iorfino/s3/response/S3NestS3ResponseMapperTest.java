@@ -3,6 +3,7 @@ package it.iorfino.s3.response;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import it.iorfino.http.S3NestHttpResponse;
+import it.iorfino.s3.model.S3Operation;
 import it.iorfino.s3.result.S3NestS3EmptyResult;
 import it.iorfino.s3.result.S3NestS3ObjectResult;
 import java.io.ByteArrayInputStream;
@@ -22,34 +23,37 @@ import org.junit.jupiter.api.Test;
 class S3NestS3ResponseMapperTest {
 
   /**
-   * Verifies that a successful operation without a response payload produces an HTTP 200 response
-   * with an empty body.
+   * Verifies that deleting an object produces an HTTP 204 No Content response with an empty body.
    */
   @Test
-  void shouldMapEmptyResultToSuccessfulEmptyResponse() throws IOException {
+  void shouldMapDeleteObjectToNoContentResponse() throws IOException {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
 
-    S3NestHttpResponse response = mapper.map(new S3NestS3EmptyResult());
+    S3NestHttpResponse response = mapper.map(new S3NestS3EmptyResult(S3Operation.DELETE_OBJECT));
 
-    assertEquals(200, response.statusCode());
+    assertEquals(204, response.statusCode());
     assertEquals("", responseBody(response));
   }
 
   /** Verifies that an object result streams its content to the HTTP response body. */
   @Test
   void shouldMapObjectResultToResponseBody() throws IOException {
+    String bodyMessage = "hello S3";
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
 
-    InputStream body = new ByteArrayInputStream("hello S3".getBytes(StandardCharsets.UTF_8));
+    InputStream body = new ByteArrayInputStream(bodyMessage.getBytes(StandardCharsets.UTF_8));
 
-    S3NestS3ObjectResult result = new S3NestS3ObjectResult(body, Map.of());
+    S3NestS3ObjectResult result = new S3NestS3ObjectResult(body, bodyMessage.length(), Map.of());
 
     S3NestHttpResponse response = mapper.map(result);
 
     assertEquals("hello S3", responseBody(response));
   }
 
-  /** Verifies that object metadata is propagated to the HTTP response headers. */
+  /**
+   * Verifies that metadata associated with an object result is propagated to the HTTP response
+   * headers.
+   */
   @Test
   void shouldMapObjectMetadataToResponseHeaders() {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
@@ -60,7 +64,7 @@ class S3NestS3ResponseMapperTest {
             "ETag", List.of("\"abc123\""));
 
     S3NestS3ObjectResult result =
-        new S3NestS3ObjectResult(new ByteArrayInputStream(new byte[0]), metadata);
+        new S3NestS3ObjectResult(new ByteArrayInputStream(new byte[0]), 0, metadata);
 
     S3NestHttpResponse response = mapper.map(result);
 
@@ -68,11 +72,33 @@ class S3NestS3ResponseMapperTest {
     assertEquals(List.of("\"abc123\""), response.headers().get("ETag"));
   }
 
+    @Test
+    void shouldMapObjectContentLengthToResponseHeader() {
+        S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
+
+        S3NestS3ObjectResult result =
+            new S3NestS3ObjectResult(
+                new ByteArrayInputStream("hello S3".getBytes(StandardCharsets.UTF_8)),
+                8,
+                Map.of());
+
+        S3NestHttpResponse response = mapper.map(result);
+
+        assertEquals(List.of("8"), response.headers().get("Content-Length"));
+    }
+
+  /**
+   * Writes the response body to an in-memory output stream and returns it as a UTF-8 string.
+   *
+   * @param response the HTTP response whose body should be written
+   * @return the response body decoded as UTF-8
+   * @throws IOException if writing the response body fails
+   */
   private String responseBody(S3NestHttpResponse response) throws IOException {
     ByteArrayOutputStream output = new ByteArrayOutputStream();
 
     response.writeBody(output);
 
-    return output.toString();
+    return output.toString(StandardCharsets.UTF_8);
   }
 }

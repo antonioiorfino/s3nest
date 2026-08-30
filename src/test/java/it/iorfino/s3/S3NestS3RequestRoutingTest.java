@@ -31,7 +31,7 @@ public class S3NestS3RequestRoutingTest {
     S3NestS3OperationHandler handler =
         request -> {
           handledRequest.set(request);
-          return new S3NestS3EmptyResult();
+          return new S3NestS3EmptyResult(S3Operation.GET_OBJECT);
         };
 
     S3NestS3RequestRouter router =
@@ -54,12 +54,15 @@ public class S3NestS3RequestRoutingTest {
   @Test
   void shouldRouteGetObjectToGetObjectHandler() {
     AtomicReference<S3NestS3Object> retrievedObject = new AtomicReference<>();
+    final String bodyMessage = "hello";
 
     S3NestS3ObjectStorage storage =
         (bucket, objectKey) -> {
           S3NestS3Object object =
               new S3NestS3Object(
-                  new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)), Map.of());
+                  new ByteArrayInputStream(bodyMessage.getBytes(StandardCharsets.UTF_8)),
+                  bodyMessage.length(),
+                  Map.of());
 
           retrievedObject.set(object);
           return object;

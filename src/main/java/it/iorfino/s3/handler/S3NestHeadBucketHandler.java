@@ -2,6 +2,7 @@ package it.iorfino.s3.handler;
 
 import it.iorfino.s3.model.S3NestS3OperationResult;
 import it.iorfino.s3.model.S3NestS3Request;
+import it.iorfino.s3.model.S3Operation;
 import it.iorfino.s3.result.S3NestS3EmptyResult;
 import it.iorfino.s3.routing.S3NestS3OperationHandler;
 import it.iorfino.s3.storage.S3NestS3BucketStorage;
@@ -41,6 +42,6 @@ public final class S3NestHeadBucketHandler implements S3NestS3OperationHandler {
       throw new S3NestS3BucketNotFoundException(request.bucket());
     }
 
-    return new S3NestS3EmptyResult();
+    return new S3NestS3EmptyResult(S3Operation.HEAD_BUCKET);
   }
 }

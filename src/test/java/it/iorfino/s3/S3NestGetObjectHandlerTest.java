@@ -23,11 +23,12 @@ public class S3NestGetObjectHandlerTest {
   /** Verifies that the GET object handler returns the object retrieved from the storage port. */
   @Test
   void shouldReturnObjectFromStorage() {
-    InputStream body = new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8));
+    String bodyMessage = "hello";
+    InputStream body = new ByteArrayInputStream(bodyMessage.getBytes(StandardCharsets.UTF_8));
 
     Map<String, List<String>> metadata = Map.of("content-type", List.of("text/plain"));
 
-    S3NestS3Object object = new S3NestS3Object(body, metadata);
+    S3NestS3Object object = new S3NestS3Object(body, bodyMessage.length(), metadata);
 
     S3NestS3ObjectStorage storage = (bucket, objectKey) -> object;
 
@@ -58,15 +59,16 @@ public class S3NestGetObjectHandlerTest {
   void shouldRequestObjectUsingBucketAndObjectKey() {
     AtomicReference<String> requestedBucket = new AtomicReference<>();
     AtomicReference<String> requestedObjectKey = new AtomicReference<>();
+    final String bodyMessage = "hello";
 
-    InputStream body = new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8));
+    InputStream body = new ByteArrayInputStream(bodyMessage.getBytes(StandardCharsets.UTF_8));
 
     S3NestS3ObjectStorage storage =
         (bucket, objectKey) -> {
           requestedBucket.set(bucket);
           requestedObjectKey.set(objectKey);
 
-          return new S3NestS3Object(body, Map.of());
+          return new S3NestS3Object(body, bodyMessage.length(), Map.of());
         };
 
     S3NestGetObjectHandler handler = new S3NestGetObjectHandler(storage);

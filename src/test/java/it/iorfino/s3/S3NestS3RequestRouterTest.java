@@ -26,7 +26,7 @@ public class S3NestS3RequestRouterTest {
     S3NestS3OperationHandler handler =
         request -> {
           handledRequest.set(request);
-          return new S3NestS3EmptyResult();
+          return new S3NestS3EmptyResult(S3Operation.GET_OBJECT);
         };
 
     S3NestS3Request request =
@@ -80,7 +80,7 @@ public class S3NestS3RequestRouterTest {
     S3NestS3OperationHandler handler =
         request -> {
           handledRequest.set(request);
-          return new S3NestS3EmptyResult();
+          return new S3NestS3EmptyResult(S3Operation.PUT_OBJECT);
         };
 
     S3NestS3Request request =
@@ -108,13 +108,13 @@ public class S3NestS3RequestRouterTest {
     S3NestS3OperationHandler getHandler =
         request -> {
           handledOperation.set(S3Operation.GET_OBJECT);
-          return new S3NestS3EmptyResult();
+          return new S3NestS3EmptyResult(S3Operation.GET_OBJECT);
         };
 
     S3NestS3OperationHandler deleteHandler =
         request -> {
           handledOperation.set(S3Operation.DELETE_OBJECT);
-          return new S3NestS3EmptyResult();
+          return new S3NestS3EmptyResult(S3Operation.DELETE_OBJECT);
         };
 
     S3NestS3RequestRouter router =
@@ -153,7 +153,7 @@ public class S3NestS3RequestRouterTest {
   /** Verifies that the router returns the result produced by the operation handler. */
   @Test
   void shouldReturnHandlerResult() {
-    S3NestS3OperationResult expectedResult = new S3NestS3EmptyResult();
+    S3NestS3OperationResult expectedResult = new S3NestS3EmptyResult(S3Operation.GET_OBJECT);
 
     S3NestS3OperationHandler handler = request -> expectedResult;
 
