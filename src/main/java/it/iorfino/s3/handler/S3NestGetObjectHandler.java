@@ -42,6 +42,6 @@ public final class S3NestGetObjectHandler implements S3NestS3OperationHandler {
       throw new S3NestS3ObjectNotFoundException(request.bucket(), request.objectKey());
     }
 
-    return new S3NestS3ObjectResult(object.body(), object.metadata());
+    return new S3NestS3ObjectResult(object.body(), object.contentLength(), object.metadata());
   }
 }

@@ -16,11 +16,12 @@ public class S3NestS3ObjectResultTest {
   /** Verifies that an object result preserves its content stream and metadata. */
   @Test
   void shouldExposeObjectContentAndMetadata() {
-    InputStream body = new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8));
+    String bodyMessage = "hello";
+    InputStream body = new ByteArrayInputStream(bodyMessage.getBytes(StandardCharsets.UTF_8));
 
     Map<String, List<String>> metadata = Map.of("content-type", List.of("text/plain"));
 
-    S3NestS3ObjectResult result = new S3NestS3ObjectResult(body, metadata);
+    S3NestS3ObjectResult result = new S3NestS3ObjectResult(body, bodyMessage.length(), metadata);
 
     assertSame(body, result.body());
     assertEquals(metadata, result.metadata());

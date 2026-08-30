@@ -31,7 +31,7 @@ public final class S3NestHttpResponse {
    */
   public S3NestHttpResponse(int statusCode, Map<String, List<String>> headers, BodyWriter body) {
     this.statusCode = statusCode;
-    this.headers = new HashMap<>();
+    this.headers = new HashMap<>(headers);
     this.body = body;
   }
 
