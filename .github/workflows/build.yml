@@ -6,6 +6,10 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -37,3 +41,10 @@ jobs:
         with:
           files: ./target/site/jacoco/jacoco.xml
           fail_ci_if_error: true
+
+      - name: Upload SpotBugs SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: target/spotbugs.sarif
+          category: spotbugs
