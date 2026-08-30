@@ -29,3 +29,11 @@ jobs:
         with:
           name: jacoco-report
           path: target/site/jacoco/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: ./target/site/jacoco/jacoco.xml
+          fail_ci_if_error: true
