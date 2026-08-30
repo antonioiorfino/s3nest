@@ -26,10 +26,16 @@ public final class S3NestS3ResponseMapper {
 
   private final S3NestS3XmlWriter xmlWriter;
 
+  /** Creates a response mapper using the default S3 XML writer. */
   public S3NestS3ResponseMapper() {
     this(new S3NestS3XmlWriter());
   }
 
+  /**
+   * Creates a response mapper using the supplied XML writer.
+   *
+   * @param xmlWriter the writer used to serialize S3 error responses
+   */
   S3NestS3ResponseMapper(S3NestS3XmlWriter xmlWriter) {
     this.xmlWriter = xmlWriter;
   }
@@ -121,6 +127,12 @@ public final class S3NestS3ResponseMapper {
     return new S3NestHttpResponse(statusCode, Map.of(), output -> {});
   }
 
+  /**
+   * Maps an S3 error code to its corresponding HTTP status code.
+   *
+   * @param errorCode the S3 error code
+   * @return the HTTP status code corresponding to the S3 error
+   */
   private int statusCodeFor(String errorCode) {
     return switch (errorCode) {
       case "NoSuchBucket", "NoSuchKey", "NoSuchUpload" -> 404;
@@ -131,6 +143,13 @@ public final class S3NestS3ResponseMapper {
     };
   }
 
+  /**
+   * Determines the successful HTTP status code for an XML-producing S3 operation.
+   *
+   * @param operation the S3 operation represented by the XML result
+   * @return the successful HTTP status code
+   * @throws IllegalArgumentException if the operation is not supported as an XML response
+   */
   private int statusCodeForSuccess(S3Operation operation) {
     return switch (operation) {
       case LIST_BUCKETS, LIST_OBJECTS, LIST_OBJECTS_V2 -> 200;

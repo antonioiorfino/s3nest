@@ -1,7 +1,6 @@
 package it.iorfino.s3.response;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 import it.iorfino.http.S3NestHttpResponse;
 import it.iorfino.s3.handler.S3NestS3BucketNotFoundException;
@@ -251,6 +250,7 @@ class S3NestS3ResponseMapperTest {
     assertNull(result.objectKey());
   }
 
+  /** Verifies that an empty object produces a successful response with zero content length. */
   @Test
   void shouldMapEmptyObjectWithZeroContentLength() throws IOException {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
@@ -265,6 +265,7 @@ class S3NestS3ResponseMapperTest {
     assertEquals("", responseBody(response));
   }
 
+  /** Verifies that mapping an object result does not consume its body input stream. */
   @Test
   void shouldNotReadObjectBodyDuringMapping() throws IOException {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
@@ -278,6 +279,7 @@ class S3NestS3ResponseMapperTest {
     assertEquals(0, body.readCount());
   }
 
+  /** Verifies that the object body is consumed only when the response body is written. */
   @Test
   void shouldReadObjectBodyWhenWritingResponse() throws IOException {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
@@ -295,6 +297,10 @@ class S3NestS3ResponseMapperTest {
     assertEquals(1, body.readCount());
   }
 
+  /**
+   * Verifies that bucket, object and request context are included in an S3 error response when
+   * available.
+   */
   @Test
   void shouldIncludeErrorContextInS3ErrorResponse() throws IOException {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
@@ -324,6 +330,9 @@ class S3NestS3ResponseMapperTest {
         responseBody(response));
   }
 
+  /**
+   * Verifies that XML-sensitive characters in bucket, object and request identifiers are escaped.
+   */
   @Test
   void shouldEscapeXmlCharactersInErrorContext() throws IOException {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
@@ -346,6 +355,7 @@ class S3NestS3ResponseMapperTest {
         responseBody(response));
   }
 
+  /** Verifies that internal error responses do not expose implementation or exception details. */
   @Test
   void shouldTranslateInternalErrorWithoutExposingExceptionDetails() throws IOException {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
@@ -364,16 +374,18 @@ class S3NestS3ResponseMapperTest {
 
     String body = responseBody(response);
 
-    assertEquals(true, body.contains("<Code>InternalError</Code>"));
-    assertEquals(
-        true,
+    assertTrue(body.contains("<Code>InternalError</Code>"));
+    assertTrue(
         body.contains("<Message>We encountered an internal error. Please try again.</Message>"));
-    assertEquals(true, body.contains("<RequestId>request-123</RequestId>"));
+    assertTrue(body.contains("<RequestId>request-123</RequestId>"));
 
-    assertEquals(false, body.contains("RuntimeException"));
-    assertEquals(false, body.contains("password"));
+    assertFalse(body.contains("RuntimeException"));
+    assertFalse(body.contains("password"));
   }
 
+  /**
+   * Verifies that the object content length takes precedence over a conflicting metadata header.
+   */
   @Test
   void shouldOverrideMetadataContentLengthWithActualObjectContentLength() {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
@@ -393,6 +405,7 @@ class S3NestS3ResponseMapperTest {
     assertEquals(List.of("text/plain"), response.headers().get("Content-Type"));
   }
 
+  /** Verifies that an XML response containing an empty collection is preserved unchanged. */
   @Test
   void shouldPreserveXmlWithEmptyCollection() throws IOException {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
@@ -409,6 +422,9 @@ class S3NestS3ResponseMapperTest {
     assertEquals(xml, responseBody(response));
   }
 
+  /**
+   * Verifies that an access-denied error without optional context is mapped to a 403 XML response.
+   */
   @Test
   void shouldMapAccessDeniedErrorWithoutContext() throws IOException {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
@@ -445,16 +461,27 @@ class S3NestS3ResponseMapperTest {
     return output.toString(StandardCharsets.UTF_8);
   }
 
+  /** Input stream used to verify when an object body is consumed. */
   private static final class TrackingInputStream extends InputStream {
 
     private int readCount;
 
+    /**
+     * Records a read attempt and signals end of stream.
+     *
+     * @return {@code -1} to indicate end of stream
+     */
     @Override
     public int read() {
       readCount++;
       return -1;
     }
 
+    /**
+     * Returns the number of read attempts performed on this stream.
+     *
+     * @return the number of read attempts
+     */
     int readCount() {
       return readCount;
     }
