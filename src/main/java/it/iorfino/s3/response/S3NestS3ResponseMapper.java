@@ -2,17 +2,15 @@ package it.iorfino.s3.response;
 
 import it.iorfino.http.S3NestHttpResponse;
 import it.iorfino.s3.model.S3NestS3OperationResult;
+import it.iorfino.s3.model.S3Operation;
 import it.iorfino.s3.result.S3NestS3EmptyResult;
 import it.iorfino.s3.result.S3NestS3ErrorResult;
 import it.iorfino.s3.result.S3NestS3ObjectResult;
 import it.iorfino.s3.result.S3NestS3XmlResult;
-import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import javax.xml.stream.XMLOutputFactory;
-import javax.xml.stream.XMLStreamException;
 
 /**
  * Maps S3 operation results to transport-independent HTTP responses.
@@ -25,6 +23,16 @@ import javax.xml.stream.XMLStreamException;
  * This keeps HTTP response semantics out of operation handlers.
  */
 public final class S3NestS3ResponseMapper {
+
+  private final S3NestS3XmlWriter xmlWriter;
+
+  public S3NestS3ResponseMapper() {
+    this(new S3NestS3XmlWriter());
+  }
+
+  S3NestS3ResponseMapper(S3NestS3XmlWriter xmlWriter) {
+    this.xmlWriter = xmlWriter;
+  }
 
   /**
    * Maps an S3 operation result to an HTTP response.
@@ -53,15 +61,24 @@ public final class S3NestS3ResponseMapper {
       return new S3NestHttpResponse(200, headers, output -> objectResult.body().transferTo(output));
     }
 
-    if (result instanceof S3NestS3XmlResult(String body)) {
+    if (result instanceof S3NestS3XmlResult(S3Operation operation, String body)) {
       return new S3NestHttpResponse(
           200,
           Map.of("Content-Type", List.of("application/xml")),
           output -> output.write(body.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
     }
 
-    if (result instanceof S3NestS3ErrorResult(String code, String message)) {
-      String body = buildErrorXml(code, message);
+    if (result
+        instanceof
+        S3NestS3ErrorResult(
+            String code,
+            String message,
+            String bucket,
+            String objectKey,
+            String requestId)) {
+      String body =
+          xmlWriter.writeError(
+              new S3NestS3ErrorResult(code, message, bucket, objectKey, requestId));
 
       return new S3NestHttpResponse(
           statusCodeFor(code),
@@ -107,30 +124,5 @@ public final class S3NestS3ResponseMapper {
       case "InvalidRequest", "InvalidArgument" -> 400;
       default -> 500;
     };
-  }
-
-  private String buildErrorXml(String code, String message) {
-    StringWriter writer = new StringWriter();
-
-    try {
-      var xmlWriter = XMLOutputFactory.newFactory().createXMLStreamWriter(writer);
-
-      xmlWriter.writeStartElement("Error");
-
-      xmlWriter.writeStartElement("Code");
-      xmlWriter.writeCharacters(code);
-      xmlWriter.writeEndElement();
-
-      xmlWriter.writeStartElement("Message");
-      xmlWriter.writeCharacters(message);
-      xmlWriter.writeEndElement();
-
-      xmlWriter.writeEndElement();
-      xmlWriter.close();
-
-      return writer.toString();
-    } catch (XMLStreamException e) {
-      throw new IllegalStateException("Unable to generate S3 error XML", e);
-    }
   }
 }

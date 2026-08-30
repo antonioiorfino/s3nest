@@ -8,6 +8,8 @@ package it.iorfino.s3.handler;
  */
 public final class S3NestS3BucketNotFoundException extends RuntimeException {
 
+  private final String bucket;
+
   /**
    * Creates an exception for a missing bucket.
    *
@@ -15,5 +17,10 @@ public final class S3NestS3BucketNotFoundException extends RuntimeException {
    */
   public S3NestS3BucketNotFoundException(String bucket) {
     super("S3 bucket not found: " + bucket);
+    this.bucket = bucket;
+  }
+
+  public String bucket() {
+    return bucket;
   }
 }

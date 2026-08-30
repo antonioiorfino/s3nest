@@ -11,4 +11,6 @@ import it.iorfino.s3.model.S3NestS3OperationResult;
  * @param code the S3 error code
  * @param message the human-readable error message
  */
-public record S3NestS3ErrorResult(String code, String message) implements S3NestS3OperationResult {}
+public record S3NestS3ErrorResult(
+    String code, String message, String bucket, String objectKey, String requestId)
+    implements S3NestS3OperationResult {}

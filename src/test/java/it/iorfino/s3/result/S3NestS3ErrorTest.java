@@ -15,9 +15,9 @@ class S3NestS3ErrorTest {
   /** Verifies that an S3 error preserves its protocol information and object context. */
   @Test
   void shouldExposeErrorInformation() {
-    S3NestS3Error error =
-        new S3NestS3Error(
-            "NoSuchKey", "The specified key does not exist.", "my-bucket", "folder/file.txt");
+    S3NestS3ErrorResult error =
+        new S3NestS3ErrorResult(
+            "NoSuchKey", "The specified key does not exist.", "my-bucket", "folder/file.txt", null);
 
     assertEquals("NoSuchKey", error.code());
     assertEquals("The specified key does not exist.", error.message());

@@ -1,6 +1,7 @@
 package it.iorfino.s3.response;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import it.iorfino.http.S3NestHttpResponse;
 import it.iorfino.s3.handler.S3NestS3BucketNotFoundException;
@@ -53,6 +54,8 @@ class S3NestS3ResponseMapperTest {
     S3NestHttpResponse response = mapper.map(result);
 
     assertEquals("hello S3", responseBody(response));
+    assertEquals(
+        List.of(String.valueOf(bodyMessage.length())), response.headers().get("Content-Length"));
   }
 
   /**
@@ -128,7 +131,7 @@ class S3NestS3ResponseMapperTest {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
 
     String xml = "<ListBucketResult><Name>test-bucket</Name></ListBucketResult>";
-    S3NestS3XmlResult result = new S3NestS3XmlResult(xml);
+    S3NestS3XmlResult result = new S3NestS3XmlResult(S3Operation.LIST_OBJECTS, xml);
 
     S3NestHttpResponse response = mapper.map(result);
 
@@ -146,7 +149,8 @@ class S3NestS3ResponseMapperTest {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
 
     S3NestS3ErrorResult result =
-        new S3NestS3ErrorResult("NoSuchBucket", "The specified bucket does not exist.");
+        new S3NestS3ErrorResult(
+            "NoSuchBucket", "The specified bucket does not exist.", null, null, null);
 
     S3NestHttpResponse response = mapper.map(result);
 
@@ -156,10 +160,11 @@ class S3NestS3ResponseMapperTest {
     String body = responseBody(response);
 
     assertEquals(
-        "<Error>"
-            + "<Code>NoSuchBucket</Code>"
-            + "<Message>The specified bucket does not exist.</Message>"
-            + "</Error>",
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<Error>\n"
+            + "  <Code>NoSuchBucket</Code>\n"
+            + "  <Message>The specified bucket does not exist.</Message>\n"
+            + "</Error>\n",
         body);
   }
 
@@ -180,7 +185,7 @@ class S3NestS3ResponseMapperTest {
 
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
 
-    S3NestS3ErrorResult result = new S3NestS3ErrorResult(errorCode, "Test error");
+    S3NestS3ErrorResult result = new S3NestS3ErrorResult(errorCode, "Test error", null, null, null);
 
     S3NestHttpResponse response = mapper.map(result);
 
@@ -196,15 +201,17 @@ class S3NestS3ResponseMapperTest {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
 
     S3NestS3ErrorResult result =
-        new S3NestS3ErrorResult("InvalidRequest", "Invalid value: <test> & \"example\"");
+        new S3NestS3ErrorResult(
+            "InvalidRequest", "Invalid value: <test> & \"example\"", null, null, null);
 
     S3NestHttpResponse response = mapper.map(result);
 
     assertEquals(
-        "<Error>"
-            + "<Code>InvalidRequest</Code>"
-            + "<Message>Invalid value: &lt;test&gt; &amp; \"example\"</Message>"
-            + "</Error>",
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<Error>\n"
+            + "  <Code>InvalidRequest</Code>\n"
+            + "  <Message>Invalid value: &lt;test&gt; &amp; &quot;example&quot;</Message>\n"
+            + "</Error>\n",
         responseBody(response));
   }
 
@@ -217,17 +224,18 @@ class S3NestS3ResponseMapperTest {
     S3NestS3ResponseMapper mapper = new S3NestS3ResponseMapper();
 
     S3NestS3ErrorResult result =
-        new S3NestS3ErrorResult("UnknownError", "An unexpected error occurred.");
+        new S3NestS3ErrorResult("UnknownError", "An unexpected error occurred.", null, null, null);
 
     S3NestHttpResponse response = mapper.map(result);
 
     assertEquals(500, response.statusCode());
     assertEquals(List.of("application/xml"), response.headers().get("Content-Type"));
     assertEquals(
-        "<Error>"
-            + "<Code>UnknownError</Code>"
-            + "<Message>An unexpected error occurred.</Message>"
-            + "</Error>",
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<Error>\n"
+            + "  <Code>UnknownError</Code>\n"
+            + "  <Message>An unexpected error occurred.</Message>\n"
+            + "</Error>\n",
         responseBody(response));
   }
 
@@ -244,6 +252,8 @@ class S3NestS3ResponseMapperTest {
 
     assertEquals("NoSuchBucket", result.code());
     assertEquals("The specified bucket does not exist.", result.message());
+    assertEquals("test-bucket", result.bucket());
+    assertNull(result.objectKey());
   }
 
   /**

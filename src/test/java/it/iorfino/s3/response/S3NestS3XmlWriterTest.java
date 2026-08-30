@@ -2,7 +2,7 @@ package it.iorfino.s3.response;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import it.iorfino.s3.result.S3NestS3Error;
+import it.iorfino.s3.result.S3NestS3ErrorResult;
 import org.junit.jupiter.api.Test;
 
 /** Tests the generation of XML representations required by the S3 protocol. */
@@ -11,9 +11,9 @@ class S3NestS3XmlWriterTest {
   /** Verifies that an S3 error is represented using the expected XML elements. */
   @Test
   void shouldWriteS3ErrorXml() {
-    S3NestS3Error error =
-        new S3NestS3Error(
-            "NoSuchKey", "The specified key does not exist.", "my-bucket", "folder/file.txt");
+    S3NestS3ErrorResult error =
+        new S3NestS3ErrorResult(
+            "NoSuchKey", "The specified key does not exist.", "my-bucket", "folder/file.txt", null);
 
     S3NestS3XmlWriter writer = new S3NestS3XmlWriter();
 
@@ -35,12 +35,13 @@ class S3NestS3XmlWriterTest {
   /** Verifies that values containing XML-sensitive characters are escaped correctly. */
   @Test
   void shouldEscapeXmlSensitiveCharacters() {
-    S3NestS3Error error =
-        new S3NestS3Error(
+    S3NestS3ErrorResult error =
+        new S3NestS3ErrorResult(
             "NoSuchKey",
             "The key <file> & \"data\" does not exist.",
             "my-bucket",
-            "folder/<file>&data.txt");
+            "folder/<file>&data.txt",
+            null);
 
     S3NestS3XmlWriter writer = new S3NestS3XmlWriter();
 
@@ -64,8 +65,8 @@ class S3NestS3XmlWriterTest {
    */
   @Test
   void shouldOmitMissingObjectContext() {
-    S3NestS3Error error =
-        new S3NestS3Error("InvalidRequest", "The request is invalid.", null, null);
+    S3NestS3ErrorResult error =
+        new S3NestS3ErrorResult("InvalidRequest", "The request is invalid.", null, null, null);
 
     S3NestS3XmlWriter writer = new S3NestS3XmlWriter();
 

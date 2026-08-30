@@ -1,6 +1,6 @@
 package it.iorfino.s3.response;
 
-import it.iorfino.s3.result.S3NestS3Error;
+import it.iorfino.s3.result.S3NestS3ErrorResult;
 
 /**
  * Writes S3-compatible XML response bodies.
@@ -37,7 +37,7 @@ public final class S3NestS3XmlWriter {
    * @return the UTF-8 XML representation of the S3 error
    * @throws NullPointerException if {@code error} is {@code null}
    */
-  public String writeError(S3NestS3Error error) {
+  public String writeError(S3NestS3ErrorResult error) {
     if (error == null) {
       throw new NullPointerException("error must not be null");
     }
