@@ -8,8 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * In-memory implementation of the {@link S3NestStorage} abstraction.
  *
- * <p>The storage state belongs exclusively to this instance. Creating two {@code InMemoryStorage}
- * instances therefore creates two independent stores.
+ * <p>The storage state belongs exclusively to this instance. Creating two {@code
+ * S3NestInMemoryStorage} instances therefore creates two independent stores.
  */
 public class S3NestInMemoryStorage implements S3NestStorage {
 
@@ -96,6 +96,15 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     return new ArrayList<>(buckets.keySet());
   }
 
+  /**
+   * Stores an object in the specified bucket.
+   *
+   * @param bucket bucket containing the object
+   * @param key opaque object key
+   * @param content object content
+   * @param metadata object metadata
+   * @throws S3NestBucketNotFoundException if the bucket does not exist
+   */
   @Override
   public void putObject(String bucket, String key, byte[] content, S3NestObjectMetadata metadata) {
 
@@ -108,6 +117,15 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     existingBucket.objects.put(key, new S3NestStoredObject(bucket, key, content, metadata));
   }
 
+  /**
+   * Retrieves an object from the specified bucket.
+   *
+   * @param bucket bucket containing the object
+   * @param key opaque object key
+   * @return the stored object
+   * @throws S3NestBucketNotFoundException if the bucket does not exist
+   * @throws S3NestObjectNotFoundException if the object does not exist
+   */
   @Override
   public S3NestStoredObject getObject(String bucket, String key) {
 
@@ -126,6 +144,14 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     return object;
   }
 
+  /**
+   * Checks whether an object exists in the specified bucket.
+   *
+   * @param bucket bucket containing the object
+   * @param key opaque object key
+   * @return {@code true} if the object exists, otherwise {@code false}
+   * @throws S3NestBucketNotFoundException if the bucket does not exist
+   */
   @Override
   public boolean objectExists(String bucket, String key) {
 
@@ -138,6 +164,15 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     return existingBucket.objects.containsKey(key);
   }
 
+  /**
+   * Deletes an object from the specified bucket.
+   *
+   * <p>Deleting a missing object is a no-op.
+   *
+   * @param bucket bucket containing the object
+   * @param key opaque object key
+   * @throws S3NestBucketNotFoundException if the bucket does not exist
+   */
   @Override
   public void deleteObject(String bucket, String key) {
 
@@ -150,6 +185,16 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     existingBucket.objects.remove(key);
   }
 
+  /**
+   * Copies an object to another bucket and key.
+   *
+   * @param sourceBucket bucket containing the source object
+   * @param sourceKey key of the source object
+   * @param destinationBucket bucket receiving the copied object
+   * @param destinationKey key of the copied object
+   * @throws S3NestBucketNotFoundException if either bucket does not exist
+   * @throws S3NestObjectNotFoundException if the source object does not exist
+   */
   @Override
   public void copyObject(
       String sourceBucket, String sourceKey, String destinationBucket, String destinationKey) {
@@ -179,6 +224,16 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     existingDestinationBucket.objects.put(destinationKey, copiedObject);
   }
 
+  /**
+   * Lists objects in the specified bucket whose keys start with the given prefix.
+   *
+   * <p>Object keys are treated as opaque strings; no path normalization is performed.
+   *
+   * @param bucket bucket to list
+   * @param prefix key prefix used for filtering
+   * @return summaries of matching objects
+   * @throws S3NestBucketNotFoundException if the bucket does not exist
+   */
   @Override
   public List<S3NestObjectSummary> listObjects(String bucket, String prefix) {
 
@@ -200,8 +255,15 @@ public class S3NestInMemoryStorage implements S3NestStorage {
         .toList();
   }
 
-  // Multipart operations will be implemented later.
-
+  /**
+   * Creates a new multipart upload for an object.
+   *
+   * @param bucket bucket that will contain the completed object
+   * @param key opaque object key
+   * @param metadata metadata to associate with the completed object
+   * @return the newly created multipart upload
+   * @throws S3NestBucketNotFoundException if the bucket does not exist
+   */
   @Override
   public S3NestMultipartUpload createMultipartUpload(
       String bucket, String key, S3NestObjectMetadata metadata) {
@@ -222,6 +284,15 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     return upload;
   }
 
+  /**
+   * Stores or replaces a part of an active multipart upload.
+   *
+   * @param uploadId identifier of the multipart upload
+   * @param partNumber part number
+   * @param content part content
+   * @return the stored multipart part
+   * @throws S3NestMultipartUploadNotFoundException if the upload does not exist
+   */
   @Override
   public void putPart(String uploadId, int partNumber, byte[] content) {
 
@@ -238,6 +309,14 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     upload.parts.put(partNumber, part);
   }
 
+  /**
+   * Retrieves a part from an active multipart upload.
+   *
+   * @param uploadId identifier of the multipart upload
+   * @param partNumber part number
+   * @return the multipart part if it exists, otherwise {@link java.util.Optional#empty()}
+   * @throws S3NestMultipartUploadNotFoundException if the upload does not exist
+   */
   @Override
   public java.util.Optional<S3NestMultipartPart> getPart(String uploadId, int partNumber) {
 
@@ -250,6 +329,15 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     return java.util.Optional.ofNullable(upload.parts.get(partNumber));
   }
 
+  /**
+   * Lists the parts currently stored for an active multipart upload.
+   *
+   * <p>The returned parts are ordered by part number.
+   *
+   * @param uploadId identifier of the multipart upload
+   * @return the stored multipart parts ordered by part number
+   * @throws S3NestMultipartUploadNotFoundException if the upload does not exist
+   */
   @Override
   public List<S3NestMultipartPart> listParts(String uploadId) {
 
@@ -264,6 +352,19 @@ public class S3NestInMemoryStorage implements S3NestStorage {
         .toList();
   }
 
+  /**
+   * Completes a multipart upload by concatenating the requested parts in the given order.
+   *
+   * <p>The resulting object is stored in the bucket associated with the upload, and the multipart
+   * upload is no longer active.
+   *
+   * @param uploadId identifier of the multipart upload
+   * @param partNumbers part numbers to concatenate, in the desired order
+   * @return the completed object
+   * @throws S3NestMultipartUploadNotFoundException if the upload does not exist
+   * @throws S3NestMultipartPartNotFoundException if a requested part does not exist
+   * @throws S3NestBucketNotFoundException if the bucket associated with the upload no longer exists
+   */
   @Override
   public S3NestStoredObject completeMultipartUpload(String uploadId, List<Integer> partNumbers) {
 
@@ -303,6 +404,12 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     return completedObject;
   }
 
+  /**
+   * Aborts an active multipart upload and discards its stored parts.
+   *
+   * @param uploadId identifier of the multipart upload
+   * @throws S3NestMultipartUploadNotFoundException if the upload does not exist
+   */
   @Override
   public void abortMultipartUpload(String uploadId) {
 

@@ -494,6 +494,12 @@ abstract class S3NestStorageContractTest {
     }
   }
 
+  /**
+   * Verifies that concurrent writes to the same object key are handled safely.
+   *
+   * <p>The test does not require a specific winning write. It verifies that concurrent access does
+   * not cause storage corruption or unexpected failures.
+   */
   @Test
   void shouldSupportConcurrentWritesToSameObject() throws Exception {
     storage.createBucket("bucket");
