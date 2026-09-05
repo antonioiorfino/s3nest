@@ -96,8 +96,6 @@ public class S3NestInMemoryStorage implements S3NestStorage {
     return new ArrayList<>(buckets.keySet());
   }
 
-  // Object operations will be implemented in the next step.
-
   @Override
   public void putObject(String bucket, String key, byte[] content, S3NestObjectMetadata metadata) {
 
