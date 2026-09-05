@@ -17,8 +17,11 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * Contract tests for the {@link S3NestStorage} abstraction.
@@ -491,6 +494,12 @@ abstract class S3NestStorageContractTest {
     }
   }
 
+  /**
+   * Verifies that concurrent writes to the same object key are handled safely.
+   *
+   * <p>The test does not require a specific winning write. It verifies that concurrent access does
+   * not cause storage corruption or unexpected failures.
+   */
   @Test
   void shouldSupportConcurrentWritesToSameObject() throws Exception {
     storage.createBucket("bucket");
@@ -516,6 +525,54 @@ abstract class S3NestStorageContractTest {
 
     assertNotNull(object);
     assertTrue(object.content().length > 0);
+  }
+
+  /**
+   * Verifies that object content can be stored and retrieved without being interpreted by the
+   * storage implementation.
+   *
+   * <p>The storage contract must support empty objects, arbitrary binary content, and reasonably
+   * large object content.
+   */
+  @ParameterizedTest
+  @MethodSource("objectContents")
+  void shouldStoreAndRetrieveDifferentObjectContents(byte[] content) {
+    storage.createBucket("bucket");
+
+    storage.putObject("bucket", "object.bin", content, metadata());
+
+    S3NestStoredObject storedObject = storage.getObject("bucket", "object.bin");
+
+    assertArrayEquals(content, storedObject.content());
+  }
+
+  /**
+   * Verifies that completing a multipart upload removes its active state.
+   *
+   * <p>After completion, operations referring to the upload must report that the upload no longer
+   * exists.
+   */
+  @Test
+  void shouldRemoveCompletedMultipartUpload() {
+    storage.createBucket("bucket");
+
+    S3NestMultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
+
+    storage.putPart(upload.uploadId(), 1, bytes("hello"));
+
+    storage.completeMultipartUpload(upload.uploadId(), List.of(1));
+
+    assertThrows(
+        S3NestMultipartUploadNotFoundException.class, () -> storage.listParts(upload.uploadId()));
+  }
+
+  /**
+   * Provides representative object contents for the object content contract.
+   *
+   * @return empty, binary, and reasonably large object contents
+   */
+  static Stream<byte[]> objectContents() {
+    return Stream.of(new byte[0], new byte[] {0, 1, 2, 127, -1, -128}, new byte[1024 * 1024]);
   }
 
   // -------------------------------------------------------------------------
