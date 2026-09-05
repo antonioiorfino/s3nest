@@ -281,7 +281,7 @@ public class S3NestInMemoryStorage implements S3NestStorage {
       S3NestMultipartPart part = upload.parts.get(partNumber);
 
       if (part == null) {
-        throw new MultipartPartNotFoundException(uploadId, partNumber);
+        throw new S3NestMultipartPartNotFoundException(uploadId, partNumber);
       }
 
       content.writeBytes(part.content());
