@@ -57,7 +57,7 @@ import org.junit.jupiter.api.Test;
  * <p>No HTTP-specific concept must appear in this test class. HTTP response codes and S3 XML errors
  * belong to the protocol layer, not to the storage abstraction.
  */
-abstract class StorageContractTest {
+abstract class S3NestStorageContractTest {
 
   private S3NestStorage storage;
 
@@ -166,7 +166,7 @@ abstract class StorageContractTest {
 
     storage.putObject("bucket", "object.txt", content, metadata());
 
-    StoredObject object = storage.getObject("bucket", "object.txt");
+    S3NestStoredObject object = storage.getObject("bucket", "object.txt");
 
     assertEquals("bucket", object.bucket());
     assertEquals("object.txt", object.key());
@@ -242,8 +242,8 @@ abstract class StorageContractTest {
   void shouldPreserveObjectMetadata() {
     storage.createBucket("bucket");
 
-    ObjectMetadata metadata =
-        new ObjectMetadata(
+    S3NestObjectMetadata metadata =
+        new S3NestObjectMetadata(
             "text/plain",
             5,
             "abc123",
@@ -254,7 +254,7 @@ abstract class StorageContractTest {
 
     storage.putObject("bucket", "object.txt", bytes("hello"), metadata);
 
-    StoredObject object = storage.getObject("bucket", "object.txt");
+    S3NestStoredObject object = storage.getObject("bucket", "object.txt");
 
     assertEquals(metadata, object.metadata());
   }
@@ -281,12 +281,13 @@ abstract class StorageContractTest {
 
     storage.putObject("bucket", "documents/a.txt", bytes("c"), metadata());
 
-    List<ObjectSummary> result = storage.listObjects("bucket", "images/");
+    List<S3NestObjectSummary> result = storage.listObjects("bucket", "images/");
 
     assertEquals(2, result.size());
 
     assertEquals(
-        List.of("images/a.jpg", "images/b.jpg"), result.stream().map(ObjectSummary::key).toList());
+        List.of("images/a.jpg", "images/b.jpg"),
+        result.stream().map(S3NestObjectSummary::key).toList());
   }
 
   // -------------------------------------------------------------------------
@@ -303,13 +304,13 @@ abstract class StorageContractTest {
     storage.createBucket("source");
     storage.createBucket("destination");
 
-    ObjectMetadata metadata = metadata();
+    S3NestObjectMetadata metadata = metadata();
 
     storage.putObject("source", "original.txt", bytes("hello"), metadata);
 
     storage.copyObject("source", "original.txt", "destination", "copy.txt");
 
-    StoredObject copied = storage.getObject("destination", "copy.txt");
+    S3NestStoredObject copied = storage.getObject("destination", "copy.txt");
 
     assertArrayEquals(bytes("hello"), copied.content());
 
@@ -330,7 +331,7 @@ abstract class StorageContractTest {
   void shouldCreateMultipartUpload() {
     storage.createBucket("bucket");
 
-    MultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
+    S3NestMultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
 
     assertNotNull(upload.uploadId());
     assertEquals("bucket", upload.bucket());
@@ -342,11 +343,11 @@ abstract class StorageContractTest {
   void shouldStoreAndRetrieveMultipartPart() {
     storage.createBucket("bucket");
 
-    MultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
+    S3NestMultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
 
     storage.putPart(upload.uploadId(), 1, bytes("part-one"));
 
-    Optional<MultipartPart> part = storage.getPart(upload.uploadId(), 1);
+    Optional<S3NestMultipartPart> part = storage.getPart(upload.uploadId(), 1);
 
     assertTrue(part.isPresent());
     assertEquals(1, part.get().partNumber());
@@ -363,7 +364,7 @@ abstract class StorageContractTest {
   void shouldListMultipartPartsInPartNumberOrder() {
     storage.createBucket("bucket");
 
-    MultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
+    S3NestMultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
 
     storage.putPart(upload.uploadId(), 3, bytes("three"));
 
@@ -371,9 +372,9 @@ abstract class StorageContractTest {
 
     storage.putPart(upload.uploadId(), 2, bytes("two"));
 
-    List<MultipartPart> parts = storage.listParts(upload.uploadId());
+    List<S3NestMultipartPart> parts = storage.listParts(upload.uploadId());
 
-    assertEquals(List.of(1, 2, 3), parts.stream().map(MultipartPart::partNumber).toList());
+    assertEquals(List.of(1, 2, 3), parts.stream().map(S3NestMultipartPart::partNumber).toList());
   }
 
   /**
@@ -386,13 +387,13 @@ abstract class StorageContractTest {
   void shouldCompleteMultipartUpload() {
     storage.createBucket("bucket");
 
-    MultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
+    S3NestMultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
 
     storage.putPart(upload.uploadId(), 1, bytes("hello "));
 
     storage.putPart(upload.uploadId(), 2, bytes("world"));
 
-    StoredObject object = storage.completeMultipartUpload(upload.uploadId(), List.of(1, 2));
+    S3NestStoredObject object = storage.completeMultipartUpload(upload.uploadId(), List.of(1, 2));
 
     assertArrayEquals(bytes("hello world"), object.content());
 
@@ -409,7 +410,7 @@ abstract class StorageContractTest {
   void shouldAbortMultipartUpload() {
     storage.createBucket("bucket");
 
-    MultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
+    S3NestMultipartUpload upload = storage.createMultipartUpload("bucket", "large.bin", metadata());
 
     storage.putPart(upload.uploadId(), 1, bytes("hello"));
 
@@ -490,6 +491,33 @@ abstract class StorageContractTest {
     }
   }
 
+  @Test
+  void shouldSupportConcurrentWritesToSameObject() throws Exception {
+    storage.createBucket("bucket");
+
+    int numberOfWrites = 20;
+
+    try (ExecutorService executor = Executors.newFixedThreadPool(4)) {
+      List<Future<?>> futures = new ArrayList<>();
+
+      for (int i = 0; i < numberOfWrites; i++) {
+        byte[] content = bytes("content-" + i);
+
+        futures.add(
+            executor.submit(() -> storage.putObject("bucket", "object.txt", content, metadata())));
+      }
+
+      for (Future<?> future : futures) {
+        future.get();
+      }
+    }
+
+    S3NestStoredObject object = storage.getObject("bucket", "object.txt");
+
+    assertNotNull(object);
+    assertTrue(object.content().length > 0);
+  }
+
   // -------------------------------------------------------------------------
   // Test helpers
   // -------------------------------------------------------------------------
@@ -500,8 +528,8 @@ abstract class StorageContractTest {
    *
    * @return deterministic test metadata
    */
-  private ObjectMetadata metadata() {
-    return new ObjectMetadata(
+  private S3NestObjectMetadata metadata() {
+    return new S3NestObjectMetadata(
         "application/octet-stream", 0, "etag", Instant.parse("2026-01-01T00:00:00Z"), Map.of());
   }
 

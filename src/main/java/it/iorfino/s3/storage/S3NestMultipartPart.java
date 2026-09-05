@@ -1,8 +1,8 @@
 package it.iorfino.s3.storage;
 
-public record MultipartPart(int partNumber, byte[] content, String eTag) {
+public record S3NestMultipartPart(int partNumber, byte[] content, String eTag) {
 
-  public MultipartPart {
+  public S3NestMultipartPart {
     if (partNumber <= 0) {
       throw new IllegalArgumentException("partNumber must be positive");
     }

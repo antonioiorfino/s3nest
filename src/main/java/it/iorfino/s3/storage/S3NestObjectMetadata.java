@@ -3,14 +3,14 @@ package it.iorfino.s3.storage;
 import java.time.Instant;
 import java.util.Map;
 
-public record ObjectMetadata(
+public record S3NestObjectMetadata(
     String contentType,
     long contentLength,
     String eTag,
     Instant lastModified,
     Map<String, String> userMetadata) {
 
-  public ObjectMetadata {
+  public S3NestObjectMetadata {
     if (contentLength < 0) {
       throw new IllegalArgumentException("contentLength must not be negative");
     }

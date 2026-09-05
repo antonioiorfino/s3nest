@@ -2,9 +2,10 @@ package it.iorfino.s3.storage;
 
 import java.util.Arrays;
 
-public record StoredObject(String bucket, String key, byte[] content, ObjectMetadata metadata) {
+public record S3NestStoredObject(
+    String bucket, String key, byte[] content, S3NestObjectMetadata metadata) {
 
-  public StoredObject {
+  public S3NestStoredObject {
     content = Arrays.copyOf(content, content.length);
   }
 

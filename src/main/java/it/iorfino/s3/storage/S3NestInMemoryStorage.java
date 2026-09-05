@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>The storage state belongs exclusively to this instance. Creating two {@code InMemoryStorage}
  * instances therefore creates two independent stores.
  */
-public class InMemoryStorage implements S3NestStorage {
+public class S3NestInMemoryStorage implements S3NestStorage {
 
   /** Buckets belonging to this storage instance. */
   private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
@@ -23,17 +23,17 @@ public class InMemoryStorage implements S3NestStorage {
   private static class Bucket {
 
     /** Objects stored in this bucket. */
-    private final Map<String, StoredObject> objects = new ConcurrentHashMap<>();
+    private final Map<String, S3NestStoredObject> objects = new ConcurrentHashMap<>();
   }
 
   /** Internal representation of an active multipart upload. */
   private static class MultipartUploadState {
 
-    private final MultipartUpload upload;
+    private final S3NestMultipartUpload upload;
 
-    private final Map<Integer, MultipartPart> parts = new ConcurrentHashMap<>();
+    private final Map<Integer, S3NestMultipartPart> parts = new ConcurrentHashMap<>();
 
-    private MultipartUploadState(MultipartUpload upload) {
+    private MultipartUploadState(S3NestMultipartUpload upload) {
       this.upload = upload;
     }
   }
@@ -99,7 +99,7 @@ public class InMemoryStorage implements S3NestStorage {
   // Object operations will be implemented in the next step.
 
   @Override
-  public void putObject(String bucket, String key, byte[] content, ObjectMetadata metadata) {
+  public void putObject(String bucket, String key, byte[] content, S3NestObjectMetadata metadata) {
 
     Bucket existingBucket = buckets.get(bucket);
 
@@ -107,11 +107,11 @@ public class InMemoryStorage implements S3NestStorage {
       throw new S3NestBucketNotFoundException(bucket);
     }
 
-    existingBucket.objects.put(key, new StoredObject(bucket, key, content, metadata));
+    existingBucket.objects.put(key, new S3NestStoredObject(bucket, key, content, metadata));
   }
 
   @Override
-  public StoredObject getObject(String bucket, String key) {
+  public S3NestStoredObject getObject(String bucket, String key) {
 
     Bucket existingBucket = buckets.get(bucket);
 
@@ -119,7 +119,7 @@ public class InMemoryStorage implements S3NestStorage {
       throw new S3NestBucketNotFoundException(bucket);
     }
 
-    StoredObject object = existingBucket.objects.get(key);
+    S3NestStoredObject object = existingBucket.objects.get(key);
 
     if (object == null) {
       throw new S3NestObjectNotFoundException(bucket, key);
@@ -162,7 +162,7 @@ public class InMemoryStorage implements S3NestStorage {
       throw new S3NestBucketNotFoundException(sourceBucket);
     }
 
-    StoredObject sourceObject = existingSourceBucket.objects.get(sourceKey);
+    S3NestStoredObject sourceObject = existingSourceBucket.objects.get(sourceKey);
 
     if (sourceObject == null) {
       throw new S3NestObjectNotFoundException(sourceBucket, sourceKey);
@@ -174,15 +174,15 @@ public class InMemoryStorage implements S3NestStorage {
       throw new S3NestBucketNotFoundException(destinationBucket);
     }
 
-    StoredObject copiedObject =
-        new StoredObject(
+    S3NestStoredObject copiedObject =
+        new S3NestStoredObject(
             destinationBucket, destinationKey, sourceObject.content(), sourceObject.metadata());
 
     existingDestinationBucket.objects.put(destinationKey, copiedObject);
   }
 
   @Override
-  public List<ObjectSummary> listObjects(String bucket, String prefix) {
+  public List<S3NestObjectSummary> listObjects(String bucket, String prefix) {
 
     Bucket existingBucket = buckets.get(bucket);
 
@@ -194,7 +194,7 @@ public class InMemoryStorage implements S3NestStorage {
         .filter(object -> object.key().startsWith(prefix))
         .map(
             object ->
-                new ObjectSummary(
+                new S3NestObjectSummary(
                     object.key(),
                     object.metadata().contentLength(),
                     object.metadata().eTag(),
@@ -205,7 +205,8 @@ public class InMemoryStorage implements S3NestStorage {
   // Multipart operations will be implemented later.
 
   @Override
-  public MultipartUpload createMultipartUpload(String bucket, String key, ObjectMetadata metadata) {
+  public S3NestMultipartUpload createMultipartUpload(
+      String bucket, String key, S3NestObjectMetadata metadata) {
 
     Bucket existingBucket = buckets.get(bucket);
 
@@ -215,8 +216,8 @@ public class InMemoryStorage implements S3NestStorage {
 
     String uploadId = java.util.UUID.randomUUID().toString();
 
-    MultipartUpload upload =
-        new MultipartUpload(uploadId, bucket, key, metadata, java.time.Instant.now());
+    S3NestMultipartUpload upload =
+        new S3NestMultipartUpload(uploadId, bucket, key, metadata, java.time.Instant.now());
 
     multipartUploads.put(uploadId, new MultipartUploadState(upload));
 
@@ -234,13 +235,13 @@ public class InMemoryStorage implements S3NestStorage {
 
     String eTag = java.util.UUID.randomUUID().toString();
 
-    MultipartPart part = new MultipartPart(partNumber, content, eTag);
+    S3NestMultipartPart part = new S3NestMultipartPart(partNumber, content, eTag);
 
     upload.parts.put(partNumber, part);
   }
 
   @Override
-  public java.util.Optional<MultipartPart> getPart(String uploadId, int partNumber) {
+  public java.util.Optional<S3NestMultipartPart> getPart(String uploadId, int partNumber) {
 
     MultipartUploadState upload = multipartUploads.get(uploadId);
 
@@ -252,7 +253,7 @@ public class InMemoryStorage implements S3NestStorage {
   }
 
   @Override
-  public List<MultipartPart> listParts(String uploadId) {
+  public List<S3NestMultipartPart> listParts(String uploadId) {
 
     MultipartUploadState upload = multipartUploads.get(uploadId);
 
@@ -261,12 +262,12 @@ public class InMemoryStorage implements S3NestStorage {
     }
 
     return upload.parts.values().stream()
-        .sorted(java.util.Comparator.comparingInt(MultipartPart::partNumber))
+        .sorted(java.util.Comparator.comparingInt(S3NestMultipartPart::partNumber))
         .toList();
   }
 
   @Override
-  public StoredObject completeMultipartUpload(String uploadId, List<Integer> partNumbers) {
+  public S3NestStoredObject completeMultipartUpload(String uploadId, List<Integer> partNumbers) {
 
     MultipartUploadState upload = multipartUploads.get(uploadId);
 
@@ -277,7 +278,7 @@ public class InMemoryStorage implements S3NestStorage {
     java.io.ByteArrayOutputStream content = new java.io.ByteArrayOutputStream();
 
     for (Integer partNumber : partNumbers) {
-      MultipartPart part = upload.parts.get(partNumber);
+      S3NestMultipartPart part = upload.parts.get(partNumber);
 
       if (part == null) {
         throw new MultipartPartNotFoundException(uploadId, partNumber);
@@ -288,8 +289,8 @@ public class InMemoryStorage implements S3NestStorage {
 
     byte[] completedContent = content.toByteArray();
 
-    StoredObject completedObject =
-        new StoredObject(
+    S3NestStoredObject completedObject =
+        new S3NestStoredObject(
             upload.upload.bucket(),
             upload.upload.key(),
             completedContent,
